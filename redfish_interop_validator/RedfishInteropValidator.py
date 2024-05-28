@@ -61,6 +61,7 @@ def main(argslist=None, configfile=None):
 
     # host info
     argget.add_argument('-i', '--ip', '--rhost', '-r', type=str, help='Address of host to test against, using http or https (example: https://123.45.6.7:8000)')
+    argget.add_argument('-passthrough', '--passthrough', type=str, help='Add a passthrough', default="")
     argget.add_argument('-u', '--username', type=str, help='Username for Authentication')
     argget.add_argument('-p', '--password', type=str, help='Password for Authentication')
     argget.add_argument('--description', type=str, help='sysdescription for identifying logs, if none is given, draw from serviceroot')
@@ -86,7 +87,7 @@ def main(argslist=None, configfile=None):
     argget.add_argument('--writecheck', action='store_true', help='(unimplemented) specify to allow WriteRequirement checks')
 
     args = argget.parse_args(argslist)
-
+    pass_through = args.passthrough
     if configfile is None:
         configfile = args.config
 
@@ -95,7 +96,9 @@ def main(argslist=None, configfile=None):
     # Set logging file
     standard_out.setLevel(logging.INFO - args.verbose if args.verbose < 3 else logging.DEBUG)
 
-    logpath = args.logdir
+    logdir = args.logdir
+    dt = datetime.now().strftime("%m_%d_%Y_%H_%M_%S")
+    logpath = os.path.join(logdir, "{}_{}".format("RedfishInteropValidator", dt))
 
     if not os.path.isdir(logpath):
         os.makedirs(logpath)
@@ -222,11 +225,11 @@ def main(argslist=None, configfile=None):
         results = None
         for profile in all_profiles:
             if 'single' in pmode:
-                success, _, resultsNew, _, _ = validateSingleURI(ppath, profile, 'Target', expectedJson=jsonData)
+                success, _, resultsNew, _, _ = validateSingleURI(ppath, profile, 'Target', expectedJson=jsonData, pass_through=pass_through)
             elif 'tree' in pmode:
-                success, _, resultsNew, _, _ = validateURITree(ppath, profile, 'Target', expectedJson=jsonData)
+                success, _, resultsNew, _, _ = validateURITree(ppath, profile, 'Target', expectedJson=jsonData, pass_through=pass_through)
             else:
-                success, _, resultsNew, _, _ = validateURITree('/redfish/v1/', profile, 'ServiceRoot', expectedJson=jsonData)
+                success, _, resultsNew, _, _ = validateURITree('/redfish/v1/', profile, 'ServiceRoot', expectedJson=jsonData, pass_through=pass_through)
             profileName = profile.get('ProfileName')
             if results is None:
                 results = resultsNew

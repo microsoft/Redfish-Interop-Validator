@@ -9,7 +9,7 @@ from io import StringIO
 
 import redfish_interop_validator.traverseInterop as traverseInterop
 import redfish_interop_validator.interop as interop
-from redfish_interop_validator.redfish import getType
+from redfish_interop_validator.redfish import getType, getNamespace, getID
 from redfish_interop_validator.interop import REDFISH_ABSENT
 
 my_logger = logging.getLogger()
@@ -49,7 +49,7 @@ def get_my_capture(this_logger, handler):
     return strings
 
 
-def validateSingleURI(URI, profile, uriName='', expectedType=None, expectedSchema=None, expectedJson=None, parent=None):
+def validateSingleURI(URI, profile, uriName='', expectedType=None, expectedSchema=None, expectedJson=None, parent=None, pass_through=""):
     """
     Validates a single URI that is given, returning its ResourceObject, counts and links
     """
@@ -87,6 +87,8 @@ def validateSingleURI(URI, profile, uriName='', expectedType=None, expectedSchem
         my_logger.warning('Tool appears to be missing vital URI information, replacing URI w/: {}'.format(URI))
     # Generate dictionary of property info
     try:
+        if len(pass_through) > 0:
+            URI = pass_through + URI
         resource_obj, return_status = traverseInterop.createResourceObject(
             uriName, URI, expectedJson, expectedType, expectedSchema, parent)
 
@@ -120,6 +122,7 @@ def validateSingleURI(URI, profile, uriName='', expectedType=None, expectedSchem
     my_logger.verbose1("*** {}, {}".format(uriName, URI))
     uriName, SchemaFullType, jsondata = uriName, uriName, resource_obj.jsondata
     SchemaType = getType(jsondata.get('@odata.type', 'NoType'))
+    SchemaID = getID(jsondata.get("@odata.id", "NoID"))
 
     oemcheck = traverseInterop.config.get('oemcheck', True)
 
@@ -167,7 +170,7 @@ def validateSingleURI(URI, profile, uriName='', expectedType=None, expectedSchem
 
     profile_resources = profile_resources.get(SchemaType)
     try:
-        propMessages, propCounts = interop.validateInteropResource(resource_obj, profile_resources, jsondata)
+        propMessages, propCounts = interop.validateInteropResource(resource_obj, profile_resources, jsondata, pass_through)
         messages = messages.extend(propMessages)
         counts.update(propCounts)
         my_logger.info('{} of {} tests passed.'.format(counts['pass'] + counts['warn'], counts['totaltests']))
@@ -245,7 +248,7 @@ def getURIfromOdata(property):
     return None
 
             
-def validateURITree(URI, profile, uriName, expectedType=None, expectedSchema=None, expectedJson=None):
+def validateURITree(URI, profile, uriName, expectedType=None, expectedSchema=None, expectedJson=None, pass_through=""):
     """name
     Validates a Tree of URIs, traversing from the first given
     """
@@ -261,7 +264,7 @@ def validateURITree(URI, profile, uriName, expectedType=None, expectedSchema=Non
 
     # Validate top URI
     validateSuccess, counts, results, links, resource_obj = \
-        validateSingleURI(URI, profile, uriName, expectedType, expectedSchema, expectedJson)
+        validateSingleURI(URI, profile, uriName, expectedType, expectedSchema, expectedJson, pass_through=pass_through)
     
     links, limited_links = links
     for skipped_link in limited_links:
@@ -307,8 +310,7 @@ def validateURITree(URI, profile, uriName, expectedType=None, expectedSchema=Non
                 # NOTE: unable to determine autoexpanded resources without Schema
                 else:
                     linkSuccess, linkCounts, linkResults, inner_links, linkobj = \
-                        validateSingleURI(link, profile, linkName, parent=parent)
-
+                        validateSingleURI(link, profile, linkName, parent=parent, pass_through=pass_through)
                 allLinks.add(link.rstrip('/'))
 
                 results.update(linkResults)
