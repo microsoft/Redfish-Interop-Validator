@@ -1,5 +1,34 @@
 # Change Log
 
+## [2.2.3] - 2024-05-31
+- Added support for 'UseCaseType' term for 'AbsentResource' usage
+
+## [2.2.2] - 2024-05-03
+- Added support for testing 'ActionInfo' requirements
+- Corrected comparison testing behavior when a property is not present to not produce false failures
+
+## [2.2.1] - 2024-04-19
+- Fixed use case checking to only report an error if zero resources are found that match a mandatory use case
+
+## [2.2.0] - 2024-03-22
+- Corrected 'WriteRequirement' checking to not produce errors when a property is marked as 'Recommended', but writes are not supported
+
+## [2.1.9] - 2024-02-26
+- Added property WriteRequirement checks based on the usage of the 'Allow' response header and the '@Redfish.WriteableProperties' term
+
+## [2.1.8] - 2024-02-09
+- Added 'collectionlimit' argument to limit the number of entries checked in a collection
+
+## [2.1.7] - 2024-01-08
+- Fixed crash condition if a 'LinkToResource' comparison is performed and the link is not present
+- Changed results for 'Recommended' and 'IfImplemented' properties to show 'Not Tested' if the property is not present
+
+## [2.1.6] - 2023-11-03
+- Corrected ConditionalRequirements to test Comparison and Values inside of matching ConditionalRequirements
+
+## [2.1.5] - 2023-10-27
+- Refactored project to publish tool on PyPI
+
 ## [2.1.4] - 2023-07-20
 - Added support for testing 'ReplacedProperty' and 'ReplacedByProperty' statements
 - Added support for testing profiles with 'UseCases' statements

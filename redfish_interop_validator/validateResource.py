@@ -3,22 +3,25 @@
 # License: BSD 3-Clause License. For full text see link: https://github.com/DMTF/Redfish-Service-Validator/blob/master/LICENSE.md
 
 import logging
+import re
 from collections import Counter
 from io import StringIO
 
-import traverseInterop
-import common.interop as interop
-from common.redfish import getType, getNamespace
-from common.interop import REDFISH_ABSENT
+import redfish_interop_validator.traverseInterop as traverseInterop
+import redfish_interop_validator.interop as interop
+from redfish_interop_validator.redfish import getType
+from redfish_interop_validator.interop import REDFISH_ABSENT
 
 my_logger = logging.getLogger()
 my_logger.setLevel(logging.DEBUG)
+
+
 class WarnFilter(logging.Filter):
     def filter(self, rec):
         return rec.levelno == logging.WARN
 
-fmt = logging.Formatter('%(levelname)s - %(message)s')
 
+fmt = logging.Formatter('%(levelname)s - %(message)s')
 
 def create_logging_capture(this_logger):
     errorMessages = StringIO()
@@ -98,7 +101,7 @@ def validateSingleURI(URI, profile, uriName='', expectedType=None, expectedSchem
         else:
             results[uriName]['payload'] = resource_obj.jsondata
 
-    except traverseInterop.AuthenticationError as e:
+    except traverseInterop.AuthenticationError:
         raise  # re-raise exception
     except Exception as e:
         my_logger.debug('Exception caught while creating ResourceObj', exc_info=1)
@@ -120,11 +123,17 @@ def validateSingleURI(URI, profile, uriName='', expectedType=None, expectedSchem
 
     oemcheck = traverseInterop.config.get('oemcheck', True)
 
+    collection_limit = traverseInterop.config.get('collectionlimit', {'LogEntry': 20})
+
     if SchemaType not in profile_resources:
         my_logger.verbose1('Visited {}, type {}'.format(URI, SchemaType))
         # Get all links available
-        links = getURIsInProperty(jsondata, uriName, oemcheck)
-        return True, counts, results, links, resource_obj
+        links, limited_links = getURIsInProperty(jsondata, uriName, oemcheck, collection_limit)
+        return True, counts, results, (links, limited_links), resource_obj
+    
+    if '_count' not in profile_resources[SchemaType]:
+        profile_resources[SchemaType]['_count'] = 0
+    profile_resources[SchemaType]['_count'] += 1
 
     # Verify odata_id properly resolves to its parent if holding fragment
     odata_id = resource_obj.jsondata.get('@odata.id', '')
@@ -170,7 +179,7 @@ def validateSingleURI(URI, profile, uriName='', expectedType=None, expectedSchem
     my_logger.info('%s, %s\n', SchemaFullType, counts)
 
     # Get all links available
-    links = getURIsInProperty(resource_obj.jsondata, uriName, oemcheck)
+    links, limited_links = getURIsInProperty(resource_obj.jsondata, uriName, oemcheck, collection_limit)
 
     results[uriName]['warns'], results[uriName]['errors'] = get_my_capture(my_logger, whandler), get_my_capture(my_logger, ehandler)
 
@@ -183,41 +192,58 @@ def validateSingleURI(URI, profile, uriName='', expectedType=None, expectedSchem
 
     for msg in results[uriName]['messages']:
         msg.parent_results = results
+        if msg.success == interop.testResultEnum.NOT_TESTED:
+            counts['notTested'] += 1
 
-    return True, counts, results, links, resource_obj
 
-import re
+    return True, counts, results, (links, limited_links), resource_obj
+
+
 urlCheck = re.compile(r"http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\(\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+")
 allowable_annotations = ['@odata.id']
 
-def getURIsInProperty(property, name='Root', oemcheck=True):
-    my_links = {}
+def getURIsInProperty(property, name='Root', oemcheck=True, collection_limit={}):
+    my_links, limited_links = {}, {}
+
     # Return nothing if we are Oem
     if not oemcheck and name == 'Oem':
-        return my_links
+        return my_links, limited_links
     if isinstance(property, dict):
-        for x, y in property.items():
-            if '@' in x and x.lower() not in allowable_annotations:
+        for sub_name, value in property.items():
+            if '@' in sub_name and sub_name.lower() not in allowable_annotations:
                 continue
-            if isinstance(y, str) and x.lower() in ['@odata.id']:
-                my_link = getURIfromOdata(y)
+            if isinstance(value, str) and sub_name.lower() in ['@odata.id']:
+                my_link = getURIfromOdata(value)
                 if my_link:
                     if '/Oem/' not in my_link:
                         my_links[name] = my_link
                     if '/Oem/' in my_link and oemcheck:
                         my_links[name] = my_link
             else:
-                my_links.update(getURIsInProperty(y, "{}:{}".format(name, x), oemcheck))
+                new_links, new_limited_links = getURIsInProperty(value, "{}:{}".format(name, sub_name), oemcheck)
+                limited_links.update(new_limited_links)
+                parent_type = property.get('@odata.type', '')
+                if sub_name == 'Members' and 'Collection' in parent_type:
+                    my_type = getType(parent_type).split('Collection')[0]
+                    if my_type in collection_limit:
+                        new_limited_links = {x: new_links[x] for x in list(new_links.keys())[collection_limit[my_type]:]}
+                        new_links = {x: new_links[x] for x in list(new_links.keys())[:collection_limit[my_type]]}
+                        limited_links.update(new_limited_links)
+                my_links.update(new_links)
     if isinstance(property, list):
         for n, x in enumerate(property):
-            my_links.update(getURIsInProperty(x, "{}#{}".format(name, n), oemcheck))
-    return my_links
+            new_links, new_limited_links = getURIsInProperty(x, "{}#{}".format(name, n), oemcheck)
+            limited_links.update(new_limited_links)
+            my_links.update(new_links)
+    return my_links, limited_links
+
 
 def getURIfromOdata(property):
     if '.json' not in property[:-5].lower():
         if '/redfish/v1' in property or urlCheck.match(property):
             return property
     return None
+
             
 def validateURITree(URI, profile, uriName, expectedType=None, expectedSchema=None, expectedJson=None):
     """name
@@ -233,11 +259,13 @@ def validateURITree(URI, profile, uriName, expectedType=None, expectedSchema=Non
     message_list = []
     resource_stats = {}
 
-    resource_info = dict(profile.get('Resources'))
-
     # Validate top URI
     validateSuccess, counts, results, links, resource_obj = \
         validateSingleURI(URI, profile, uriName, expectedType, expectedSchema, expectedJson)
+    
+    links, limited_links = links
+    for skipped_link in limited_links:
+        allLinks.add(limited_links[skipped_link])
 
     if resource_obj:
         SchemaType = getType(resource_obj.jsondata.get('@odata.type', 'NoType'))
@@ -259,7 +287,7 @@ def validateURITree(URI, profile, uriName, expectedType=None, expectedSchema=Non
             msg, m_success = interop.validateMinVersion(resource_obj.jsondata.get("RedfishVersion", "0"), serviceVersion)
             message_list.append(msg)
 
-        currentLinks = [(l, links[l], resource_obj) for l in links]
+        currentLinks = [(link, links[link], resource_obj) for link in links]
         # todo : churning a lot of links, causing possible slowdown even with set checks
         while len(currentLinks) > 0:
             newLinks = list()
@@ -278,7 +306,7 @@ def validateURITree(URI, profile, uriName, expectedType=None, expectedSchema=Non
 
                 # NOTE: unable to determine autoexpanded resources without Schema
                 else:
-                    linkSuccess, linkCounts, linkResults, innerLinks, linkobj = \
+                    linkSuccess, linkCounts, linkResults, inner_links, linkobj = \
                         validateSingleURI(link, profile, linkName, parent=parent)
 
                 allLinks.add(link.rstrip('/'))
@@ -289,7 +317,12 @@ def validateURITree(URI, profile, uriName, expectedType=None, expectedSchema=Non
                 if not linkSuccess:
                     continue
 
-                innerLinksTuple = [(link, innerLinks[link], linkobj) for link in innerLinks]
+                inner_links, inner_limited_links = inner_links
+
+                for skipped_link in inner_limited_links:
+                    allLinks.add(inner_limited_links[skipped_link])
+
+                innerLinksTuple = [(link, inner_links[link], linkobj) for link in inner_links]
                 newLinks.extend(innerLinksTuple)
                 SchemaType = getType(linkobj.jsondata.get('@odata.type', 'NoType'))
 
@@ -316,7 +349,7 @@ def validateURITree(URI, profile, uriName, expectedType=None, expectedSchema=Non
                     resource_stats[SchemaType]['Exists'] = True
                     resource_stats[SchemaType]['URIsFound'].append(link.rstrip('/'))
                     resource_stats[SchemaType]['SubordinateTo'].add(tuple(reversed(subordinate_tree)))
-                    resource_stats[SchemaType]['UseCasesFound'].union(usecases_found)
+                    resource_stats[SchemaType]['UseCasesFound'] = resource_stats[SchemaType]['UseCasesFound'].union(usecases_found)
 
             if refLinks is not currentLinks and len(newLinks) == 0 and len(refLinks) > 0:
                 currentLinks = refLinks
@@ -422,11 +455,11 @@ def validateURITree(URI, profile, uriName, expectedType=None, expectedSchema=Non
     finalResults = {}
 
     for item in message_list:
-        if item.success == interop.sEnum.WARN:
+        if item.success == interop.testResultEnum.WARN:
             message_counts['warn'] += 1
-        elif item.success == interop.sEnum.PASS:
+        elif item.success == interop.testResultEnum.PASS:
             message_counts['pass'] += 1
-        elif item.success == interop.sEnum.FAIL:
+        elif item.success == interop.testResultEnum.FAIL:
             message_counts['fail.{}'.format(item.name)] += 1
 
     finalResults['n/a'] = {'uri': "Service Level Requirements", 'success': message_counts.get('fail', 0) == 0,
