@@ -9,7 +9,7 @@ from collections import Counter
 
 import logging
 from redfish_interop_validator.redfish import getNamespaceUnversioned, getType, getNamespace
-from redfish_interop_validator.traverseInterop import callResourceURI
+from redfish_interop_validator.traverseInterop import callResourceURI, createResourceObject
 my_logger = logging.getLogger()
 my_logger.setLevel(logging.DEBUG)
 
@@ -151,7 +151,12 @@ def validateRequirement(profile_entry, rf_payload_item=None, conditional=False, 
             paramPass = testResultEnum.NA
 
     my_logger.debug('\tpass ' + str(paramPass))
-    return msgInterop('ReadRequirement', original_profile_entry, 'Must Exist' if profile_entry == "Mandatory" else 'Any', 'Exists' if not propDoesNotExist else 'DNE', paramPass),\
+    value_to_Show = "Exists" if not propDoesNotExist else 'DNE'
+    if not propDoesNotExist:
+        if isinstance(rf_payload_item, str) or isinstance(rf_payload_item, int) \
+            or isinstance(rf_payload_item, float) or isinstance(rf_payload_item, bool):
+                value_to_Show = rf_payload_item
+    return msgInterop('ReadRequirement', original_profile_entry, 'Must Exist' if profile_entry == "Mandatory" else 'Any', value_to_Show, paramPass),\
         paramPass
 
 
@@ -254,6 +259,8 @@ def checkComparison(val, compareType, target):
     """
     my_logger.verbose1('Testing a comparison \n\t' + str((val, compareType, target)))
     vallist = val if isinstance(val, list) else [val]
+    if not vallist:
+        return
     paramPass = False
     if compareType is None:
         my_logger.error('CompareType not available in payload')
@@ -477,7 +484,7 @@ def find_key_in_payload(path_to_key, redfish_parent_payload):
     return key_exists
 
 
-def validatePropertyRequirement(propResourceObj, profile_entry, rf_payload_tuple, item_name):
+def validatePropertyRequirement(propResourceObj, profile_entry, rf_payload_tuple, item_name, passthrough=""):
     """
     Validate PropertyRequirements
     """
@@ -528,7 +535,7 @@ def validatePropertyRequirement(propResourceObj, profile_entry, rf_payload_tuple
                 if checkConditionalRequirement(propResourceObj, item, rf_payload_tuple):
                     my_logger.info("\tCondition DOES apply")
                     conditionalMsgs, conditionalCounts = validatePropertyRequirement(
-                        propResourceObj, item, rf_payload_tuple, item_name)
+                        propResourceObj, item, rf_payload_tuple, item_name, passthrough)
                     counts.update(conditionalCounts)
                     for item in conditionalMsgs:
                         item.name = item.name.replace('.', '.Conditional.', 1)
@@ -564,9 +571,10 @@ def validatePropertyRequirement(propResourceObj, profile_entry, rf_payload_tuple
 
         # Read Requirement is default mandatory if not present
         requirement_entry = profile_entry.get('ReadRequirement', 'Mandatory')
-        msg, requirement_success = validateRequirement(requirement_entry, redfish_value, parent_object_tuple=redfish_parent_payload)
+        msg, success = validateRequirement(requirement_entry, redfish_value, parent_object_tuple=redfish_parent_payload)
+        msg.name = "{}.{}".format(propResourceObj.jsondata['@odata.id'], item_name)
         msgs.append(msg)
-        msg.name = item_name + '.' + msg.name
+        msg.name = propResourceObj.jsondata['@odata.id']+ "." + item_name
 
         if "WriteRequirement" in profile_entry:
             headers = propResourceObj.headers
@@ -595,10 +603,6 @@ def validatePropertyRequirement(propResourceObj, profile_entry, rf_payload_tuple
                 msg, success = msgInterop('Comparison', my_values, my_compare, REDFISH_ABSENT, testResultEnum.NOT_TESTED), True
             else:
                 msg, success = checkComparison(redfish_value, my_compare, my_values)
-            msgs.append(msg)
-            msg.name = item_name + '.' + msg.name
-
-            # Embed test results into profile, going forward seems to be the quick option outside of making a proper test object
             if my_compare in ['AnyOf', 'AllOf']:
                 msg.ignore = True
                 if not profile_entry.get('_msgs'):
@@ -606,14 +610,38 @@ def validatePropertyRequirement(propResourceObj, profile_entry, rf_payload_tuple
                 profile_entry['_msgs'].append(msg)
             elif not success:
                 my_logger.error("Comparison failed")
+            if not success:
+                my_logger.error("### Validating PropertyValueRequirements for {} FAILED".format(profile_entry.get("Values", [])))
+                # pcounts = {"property.value.{}.not.found".format(profile_entry.get("Values", [])) : 1}
+                msg = msgInterop('', profile_entry.get("Values", []), my_compare, redfish_value, testResultEnum.FAIL)
+                msg.name = "{}.{} {} {}".format(propResourceObj.jsondata['@odata.id'], item_name, redfish_value, profile_entry.get("Values", []))
+                # msg.name = "Comparison '{}' value {} not found in property {} {}.{}".format(profile_entry.get("Comparison", "AnyOf"), profile_entry.get("Values", []), item_name, propResourceObj.jsondata['@odata.id'], "ValueRequirements")
+                # counts.update(pcounts)
+                msgs.append(msg)
+                # return msgs, counts
+            else:
+                my_logger.info("### Validating PropertyValueRequirements for {}".format(profile_entry.get("Values", [])))
+                # pcounts = {"property.value.{}.exists".format(profile_entry.get("Values", [])) : 1}
+                msg = msgInterop('', profile_entry.get("Values", []), my_compare, redfish_value, testResultEnum.PASS)
+                msg.name = "{}.{} {} {}".format(propResourceObj.jsondata['@odata.id'], item_name, redfish_value, profile_entry.get("Values", []))
+                # msg.name = "Comparison '{}' value {} found in property {} {}.{}".format(profile_entry.get("Comparison", "AnyOf"), profile_entry.get("Values", []), item_name, propResourceObj.jsondata['@odata.id'], "ValueRequirements")
+                # counts.update(pcounts)
+                msgs.append(msg)
+                # return msgs, counts
+            # msgs.append(msg)
+            # msg.name = item_name + '.' + msg.name
+
+            # Embed test results into profile, going forward seems to be the quick option outside of making a proper test object
+            
 
         if "PropertyRequirements" in profile_entry:
             innerDict = profile_entry["PropertyRequirements"]
             if isinstance(redfish_value, dict):
                 for item in innerDict:
                     my_logger.debug('inside complex ' + item_name + '.' + item)
+                    my_logger.info('### Validating PropertyRequirements for {}'.format(item))
                     complexMsgs, complexCounts = validatePropertyRequirement(
-                        propResourceObj, innerDict[item], (redfish_value.get(item, REDFISH_ABSENT), rf_payload_tuple), item)
+                        propResourceObj, innerDict[item], (redfish_value.get(item, REDFISH_ABSENT), rf_payload_tuple), item, passthrough)
                     msgs.extend(complexMsgs)
                     counts.update(complexCounts)
             else:
@@ -768,7 +796,7 @@ def checkInteropURI(r_obj, profile_entry):
     return compareRedfishURI(profile_entry, my_uri)
 
 
-def validateInteropResource(propResourceObj, interop_profile, rf_payload):
+def validateInteropResource(propResourceObj, interop_profile, rf_payload, passthrough=""):
     """
     Base function that validates a single Interop Resource by its profile_entry
     """
@@ -886,4 +914,14 @@ def validateInteropResource(propResourceObj, interop_profile, rf_payload):
         elif item.success == testResultEnum.FAIL:
             counts['fail.{}'.format(item.name)] += 1
         counts['totaltests'] += 1
+    
+    
     return msgs, counts
+
+
+def get_valid_passthrough(passthrough, uri):
+    search_passthrough = uri.find(passthrough, 0)
+    if search_passthrough != -1:
+        if uri[0:len(passthrough)] == passthrough:
+            return ""
+    return passthrough
