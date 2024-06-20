@@ -59,7 +59,6 @@ def validateSingleURI(URI, profile, uriName='', expectedType=None, expectedSchem
     results, messages = {}, []
 
     ehandler, whandler = create_logging_capture(my_logger)
-
     results[uriName] = {'uri': URI,
                         'success': False,
                         'counts': counts,
@@ -261,11 +260,13 @@ def validateURITree(URI, profile, uriName, expectedType=None, expectedSchema=Non
     error_messages = StringIO()
     message_list = []
     resource_stats = {}
-
+    # BUG FIX:- the count was counting 2n+1. So for solving this we have to initialize the count to Counter and update the single count to it for top URI.
+    counts = Counter()
+    results = {}
     # Validate top URI
-    validateSuccess, counts, results, links, resource_obj = \
+    validateSuccess, single_counts, results, links, resource_obj = \
         validateSingleURI(URI, profile, uriName, expectedType, expectedSchema, expectedJson, pass_through=pass_through)
-    
+    counts.update(single_counts)
     links, limited_links = links
     for skipped_link in limited_links:
         allLinks.add(limited_links[skipped_link])
