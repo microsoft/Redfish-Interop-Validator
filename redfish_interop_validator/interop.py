@@ -28,7 +28,6 @@ class testResultEnum(Enum):
 
 REDFISH_ABSENT = 'n/a'
 
-
 class msgInterop:
     def __init__(self, name, profile_entry, expected, actual, success):
         self.name = name
@@ -41,6 +40,9 @@ class msgInterop:
         else:
             self.success = success
         self.parent_results = None
+    def toJSON(self):
+        return {"name": self.name,
+                "success": True if self.success == testResultEnum.PASS else False}
 
 
 def validateComparisonAnyOfAllOf(profile_entry, property_path="Unspecified"):
@@ -484,7 +486,7 @@ def find_key_in_payload(path_to_key, redfish_parent_payload):
     return key_exists
 
 
-def validatePropertyRequirement(propResourceObj, profile_entry, rf_payload_tuple, item_name, passthrough=""):
+def validatePropertyRequirement(propResourceObj, profile_entry, rf_payload_tuple, item_name, parent_item_name="", passthrough=""):
     """
     Validate PropertyRequirements
     """
@@ -535,7 +537,7 @@ def validatePropertyRequirement(propResourceObj, profile_entry, rf_payload_tuple
                 if checkConditionalRequirement(propResourceObj, item, rf_payload_tuple):
                     my_logger.info("\tCondition DOES apply")
                     conditionalMsgs, conditionalCounts = validatePropertyRequirement(
-                        propResourceObj, item, rf_payload_tuple, item_name, passthrough)
+                        propResourceObj, item, rf_payload_tuple, item_name, item_name, passthrough)
                     counts.update(conditionalCounts)
                     for item in conditionalMsgs:
                         item.name = item.name.replace('.', '.Conditional.', 1)
@@ -560,7 +562,7 @@ def validatePropertyRequirement(propResourceObj, profile_entry, rf_payload_tuple
         cnt = 0
         for item in redfish_value:
             listmsgs, listcounts = validatePropertyRequirement(
-                propResourceObj, profile_entry, (item, redfish_parent_payload), item_name + '#' + str(cnt))
+                propResourceObj, profile_entry, (item, redfish_parent_payload), item_name + '#' + str(cnt), item_name + '#' + str(cnt), passthrough)
             counts.update(listcounts)
             msgs.extend(listmsgs)
             cnt += 1
@@ -572,9 +574,9 @@ def validatePropertyRequirement(propResourceObj, profile_entry, rf_payload_tuple
         # Read Requirement is default mandatory if not present
         requirement_entry = profile_entry.get('ReadRequirement', 'Mandatory')
         msg, success = validateRequirement(requirement_entry, redfish_value, parent_object_tuple=redfish_parent_payload)
-        msg.name = "{}.{}".format(propResourceObj.jsondata['@odata.id'], item_name)
+        error_item_name = "{}.{}".format(parent_item_name, item_name) if parent_item_name != item_name else parent_item_name
+        msg.name = "{}.{}".format(propResourceObj.jsondata['@odata.id'], error_item_name)
         msgs.append(msg)
-        msg.name = propResourceObj.jsondata['@odata.id']+ "." + item_name
 
         if "WriteRequirement" in profile_entry:
             headers = propResourceObj.headers
@@ -636,12 +638,15 @@ def validatePropertyRequirement(propResourceObj, profile_entry, rf_payload_tuple
 
         if "PropertyRequirements" in profile_entry:
             innerDict = profile_entry["PropertyRequirements"]
+            if parent_item_name != item_name:
+                parent_item_name = parent_item_name + "." + item_name  
             if isinstance(redfish_value, dict):
                 for item in innerDict:
-                    my_logger.debug('inside complex ' + item_name + '.' + item)
-                    my_logger.info('### Validating PropertyRequirements for {}'.format(item))
+                    my_logger.info('inside complex ' + item_name + '.' + item)
+                    property_name = "{}.{}".format(parent_item_name, item) if parent_item_name != item else parent_item_name
+                    my_logger.info('### Validating PropertyRequirements for {}'.format(property_name))
                     complexMsgs, complexCounts = validatePropertyRequirement(
-                        propResourceObj, innerDict[item], (redfish_value.get(item, REDFISH_ABSENT), rf_payload_tuple), item, passthrough)
+                        propResourceObj, innerDict[item], (redfish_value.get(item, REDFISH_ABSENT), rf_payload_tuple), item, parent_item_name, passthrough)
                     msgs.extend(complexMsgs)
                     counts.update(complexCounts)
             else:
@@ -877,7 +882,7 @@ def validateInteropResource(propResourceObj, interop_profile, rf_payload, passth
         for item in innerDict:
             # NOTE: Program no longer performs fuzzy checks for misnamed properties, since there is no schema
             my_logger.info('### Validating PropertyRequirements for {}'.format(item))
-            pmsgs, pcounts = validatePropertyRequirement(propResourceObj, innerDict[item], (rf_payload.get(item, REDFISH_ABSENT), rf_payload_tuple), item)
+            pmsgs, pcounts = validatePropertyRequirement(propResourceObj, innerDict[item], (rf_payload.get(item, REDFISH_ABSENT), rf_payload_tuple), item, item)
             counts.update(pcounts)
             msgs.extend(pmsgs)
     if "ActionRequirements" in interop_profile:
@@ -911,7 +916,7 @@ def validateInteropResource(propResourceObj, interop_profile, rf_payload, passth
             counts['warn'] += 1
         elif item.success == testResultEnum.PASS:
             counts['pass'] += 1
-        elif item.success == testResultEnum.FAIL:
+        elif item.success == testResultEnum.FAIL and 'fail.{}'.format(item.name) not in counts:
             counts['fail.{}'.format(item.name)] += 1
         counts['totaltests'] += 1
     

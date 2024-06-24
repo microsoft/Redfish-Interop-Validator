@@ -165,3 +165,7 @@ logs/
 *.pyc
 *.spec
 *.egg-info/
+
+
+test_logs/*
+Custom_Profiles/*
