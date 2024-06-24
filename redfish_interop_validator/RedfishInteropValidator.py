@@ -15,7 +15,7 @@ from collections import Counter
 
 import redfish_interop_validator.traverseInterop as traverseInterop
 from redfish_interop_validator.profile import getProfiles, checkProfileAgainstSchema, hashProfile
-from redfish_interop_validator.validateResource import validateSingleURI, validateURITree
+from redfish_interop_validator.validateResource import validateSingleURI, validateURITree, validateURINodeTree
 
 tool_version = '2.2.3'
 
@@ -70,7 +70,7 @@ def main(argslist=None, configfile=None):
     argget.add_argument('--token', type=str, help='bearer token for authtype Token')
 
     # validator options
-    argget.add_argument('--payload', type=str, help='mode to validate payloads [Tree, Single, SingleFile, TreeFile] followed by resource/filepath', nargs=2)
+    argget.add_argument('--payload', type=str, help='mode to validate payloads [Tree, Single, SingleFile, TreeFile, NodeTree] followed by resource/filepath', nargs=2)
     argget.add_argument('--logdir', type=str, default='./logs', help='directory for log files')
     argget.add_argument('--nooemcheck', action='store_false', dest='oemcheck', help='Don\'t check OEM items')
     argget.add_argument('--debugging', action="store_true", help='Output debug statements to text log, otherwise it only uses INFO')
@@ -209,7 +209,7 @@ def main(argslist=None, configfile=None):
         pmode, ppath = 'Default', ''
     pmode = pmode.lower()
 
-    if pmode not in ['tree', 'single', 'singlefile', 'treefile', 'default']:
+    if pmode not in ['tree', 'single', 'singlefile', 'treefile', 'default', 'nodetree']:
         pmode = 'Default'
         my_logger.warning('PayloadMode or path invalid, using Default behavior')
     if 'file' in pmode:
@@ -226,6 +226,8 @@ def main(argslist=None, configfile=None):
         for profile in all_profiles:
             if 'single' in pmode:
                 success, _, resultsNew, _, _ = validateSingleURI(ppath, profile, 'Target', expectedJson=jsonData, pass_through=pass_through)
+            elif 'nodetree' in pmode:
+                success, _, resultsNew, _, _ = validateURINodeTree(ppath, profile, 'Target', expectedJson=jsonData, pass_through=pass_through)
             elif 'tree' in pmode:
                 success, _, resultsNew, _, _ = validateURITree(ppath, profile, 'Target', expectedJson=jsonData, pass_through=pass_through)
             else:
@@ -262,7 +264,6 @@ def main(argslist=None, configfile=None):
 
     for item in results:
         innerCounts = results[item]['counts']
-
         # detect if there are error messages for this resource, but no failure counts; if so, add one to the innerCounts
         counters_all_pass = True
         for countType in sorted(innerCounts.keys()):

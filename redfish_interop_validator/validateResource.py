@@ -330,6 +330,238 @@ def validateURITree(URI, profile, uriName, expectedType=None, expectedSchema=Non
                 SchemaType = getType(linkobj.jsondata.get('@odata.type', 'NoType'))
 
                 subordinate_tree = []
+                current_parent = linkobj.parent
+                while current_parent:
+                    parentType = getType(current_parent.jsondata.get('@odata.type', 'NoType'))
+                    subordinate_tree.append(parentType)
+                    current_parent = current_parent.parent
+
+                # Search for UseCase.USECASENAME
+                usecases_found = [msg.name.split('.')[-1] for msg in linkResults[linkName]['messages'] if 'UseCase' == msg.name.split('.')[0]]
+
+                if resource_stats.get(SchemaType) is None:
+                    resource_stats[SchemaType] = {
+                        "Exists": True,
+                        "Writeable": False,
+                        "URIsFound": [link.rstrip('/')],
+                        "SubordinateTo": set([tuple(reversed(subordinate_tree))]),
+                        "UseCasesFound": set(usecases_found),
+                    }
+                else:
+                    resource_stats[SchemaType]['Exists'] = True
+                    resource_stats[SchemaType]['URIsFound'].append(link.rstrip('/'))
+                    resource_stats[SchemaType]['SubordinateTo'].add(tuple(reversed(subordinate_tree)))
+                    resource_stats[SchemaType]['UseCasesFound'] = resource_stats[SchemaType]['UseCasesFound'].union(usecases_found)
+            
+            
+            if refLinks is not currentLinks and len(newLinks) == 0 and len(refLinks) > 0:
+                currentLinks = refLinks
+            else:
+                currentLinks = newLinks
+
+        my_logger.info('Service Level Checks')
+        # NOTE: readrequirements will likely be errors when using --payload outside of root
+        
+        # For every resource check ReadRequirement
+        # TODO: verify if IfImplemented should report a fail if any fails exist.  Also verify the same for Recommended
+        resources_in_profile = profile.get('Resources', [])
+        for resource_type in resources_in_profile:
+            profile_entry = resources_in_profile[resource_type]
+
+            if 'PropertyRequirements' in profile_entry:
+                msgs = interop.validateComparisonAnyOfAllOf(profile_entry['PropertyRequirements'], resource_type)
+                message_list.extend(msgs)
+
+            does_resource_exist, expected_requirement = False, None
+
+            resource_exists, uris_found, subs_found = False, [], []
+
+            # If exist and for what URIs...
+            if resource_type in resource_stats:
+                resource_exists = resource_stats[resource_type]['Exists']
+                uris_found = resource_stats[resource_type]['URIsFound']
+                subs_found = resource_stats[resource_type]['SubordinateTo']
+                usecases_found = resource_stats[resource_type]['UseCasesFound']
+
+            # Before all else, UseCases takes priority
+            if 'UseCases' in profile_entry:
+                # For each use case, apply the Requirement
+                for use_case in profile_entry['UseCases']:
+                    entry_title = use_case.get("UseCaseTitle", "NoName").replace(' ', '_')
+                    expected_requirement = use_case.get("ReadRequirement", "Mandatory")
+                    uris_applied = use_case.get("URIs")
+
+                    if uris_applied:
+                        does_resource_exist = any([interop.compareRedfishURI(uris_applied, uri) for uri in uris_found])
+                    else:
+                        does_resource_exist = resource_exists
+
+                    does_resource_exist = does_resource_exist and entry_title in usecases_found
+
+                    my_logger.info('Validating UseCase {} of {} ReadRequirement'.format(entry_title, resource_type))
+
+                    my_msg, _ = interop.validateRequirement(expected_requirement, 'Exists' if does_resource_exist else REDFISH_ABSENT)
+                    my_msg.name = 'UseCase.{}.{}'.format(entry_title, my_msg.name)
+                    if uris_applied:
+                        my_msg.expected = "{} at {}".format(my_msg.expected, ", ".join(uris_applied))
+                    message_list.append(my_msg)
+                continue  
+
+            # Check conditionals, if it applies, get its requirement
+            elif "ConditionalRequirements" in profile_entry:
+                for condition in profile_entry['ConditionalRequirements']:
+                    uris_applied = condition.get("URIs")
+                    subordinate_condition = condition.get("SubordinateToResource")
+                    # Check if we have valid URIs for this conditional
+                    if uris_applied:
+                        does_resource_exist = any([interop.compareRedfishURI(uris_applied, uri) for uri in uris_found])
+                        my_logger.info('Checking if any {} in {}: {}'.format(uris_found, uris_applied, does_resource_exist))
+                    # Or check if we are underneath the correct resource chain
+                    elif subordinate_condition:
+                        does_resource_exist = any([(tuple((subordinate_condition))) == chain[-len(subordinate_condition):] for chain in subs_found])
+                        my_logger.info('Checking if any {} matches {}: {}'.format([x for x in subs_found], subordinate_condition, does_resource_exist))
+                    # warn user if Conditional has no appropriate conditions to use
+                    else:
+                        does_resource_exist = resource_exists
+                        my_logger.warn('This resource {} has no valid Conditional in ConditionalRequirements'.format(resource_type))
+
+                    # if we have a ReadRequirement...
+                    expected_requirement = condition.get("ReadRequirement")
+                    if expected_requirement:
+                        my_logger.info('Validating {} Conditional ReadRequirement'.format(resource_type))
+                        my_msg, _ = interop.validateRequirement(expected_requirement, 'Exists' if does_resource_exist else REDFISH_ABSENT)
+                        my_msg.name = '{}.Conditional.{}'.format(resource_type, my_msg.name)
+                        if uris_applied:
+                            my_msg.expected = "{} at {}".format(my_msg.expected, ", ".join(uris_applied))
+                        if subordinate_condition:
+                            my_msg.expected = "{} under {}".format(my_msg.expected, ", ".join(subordinate_condition))
+                        message_list.append(my_msg)
+
+            # Outside of ConditionalRequirements, check just for URIs
+            # TODO: Verify if this should run if ConditionalRequirements exists
+            expected_requirement = profile_entry.get("ReadRequirement", "Mandatory")
+            uris_applied = profile_entry.get("URIs")
+
+            if uris_applied:
+                does_resource_exist = any([interop.compareRedfishURI(uris_applied, uri) for uri in uris_found])
+            else:
+                does_resource_exist = resource_exists
+
+            my_logger.info('Validating {} ReadRequirement'.format(resource_type))
+            my_msg, _ = interop.validateRequirement(expected_requirement, 'Exists' if does_resource_exist else REDFISH_ABSENT)
+            my_msg.name = '{}.{}'.format(resource_type, my_msg.name)
+            if uris_applied:
+                my_msg.expected = "{} at {}".format(my_msg.expected, ", ".join(uris_applied))
+            message_list.append(my_msg)
+            
+    # interop service level checks
+    finalResults = {}
+
+    for item in message_list:
+        if item.success == interop.testResultEnum.WARN:
+            message_counts['warn'] += 1
+        elif item.success == interop.testResultEnum.PASS:
+            message_counts['pass'] += 1
+        elif item.success == interop.testResultEnum.FAIL:
+            message_counts['fail.{}'.format(item.name)] += 1
+
+    finalResults['n/a'] = {'uri': "Service Level Requirements", 'success': message_counts.get('fail', 0) == 0,
+                           'counts': message_counts,
+                           'messages': message_list, 'errors': error_messages.getvalue(), 'warns': '',
+                           'rtime': '', 'context': '', 'fulltype': ''}
+    finalResults.update(results)
+    error_messages.close()
+
+    return validateSuccess, counts, finalResults, refLinks, resource_obj
+
+
+def validateURINodeTree(URI, profile, uriName, expectedType=None, expectedSchema=None, expectedJson=None, pass_through=""):
+    """name
+    Validates a Tree of URIs, traversing from the first given
+    """
+    allLinks = set()
+    allLinks.add(URI.rstrip('/'))
+    refLinks = list()
+
+    # Resource level validation
+    message_counts = Counter()
+    error_messages = StringIO()
+    message_list = []
+    resource_stats = {}
+    # BUG FIX:- the count was counting 2n+1. So for solving this we have to initialize the count to Counter and update the single count to it for top URI.
+    counts = Counter()
+    results = {}
+    # Validate top URI
+    validateSuccess, single_counts, results, links, resource_obj = \
+        validateSingleURI(URI, profile, uriName, expectedType, expectedSchema, expectedJson, pass_through=pass_through)
+    counts.update(single_counts)
+    links, limited_links = links
+    for skipped_link in limited_links:
+        allLinks.add(limited_links[skipped_link])
+    # FEATURE - NodeTree 
+    links = {key:value for key, value in links.items() if URI in value}
+    if resource_obj:
+        SchemaType = getType(resource_obj.jsondata.get('@odata.type', 'NoType'))
+        resource_stats[SchemaType] = {
+            "Exists": True,
+            "Writeable": False,
+            "URIsFound": [URI.rstrip('/')],
+            "SubordinateTo": set(),
+            "UseCasesFound": set()
+        }
+
+    # # parent first, then child execution
+    # # do top level root first, then do each child root, then their children...
+    # # hold refs for last (less recursion)
+    if validateSuccess:
+        serviceVersion = profile.get("Protocol")
+        if serviceVersion is not None and uriName == 'ServiceRoot':
+            serviceVersion = serviceVersion.get('MinVersion', '1.0.0')
+            msg, m_success = interop.validateMinVersion(resource_obj.jsondata.get("RedfishVersion", "0"), serviceVersion)
+            message_list.append(msg)
+
+        currentLinks = [(link, links[link], resource_obj) for link in links]
+        # todo : churning a lot of links, causing possible slowdown even with set checks
+        while len(currentLinks) > 0:
+            newLinks = list()
+            for linkName, link, parent in currentLinks:
+
+                if link is None or link.rstrip('/') in allLinks:
+                    continue
+            
+                if '#' in link:
+                    # NOTE: Skips referenced Links (using pound signs), this program currently only works with direct links
+                    continue
+
+                if refLinks is not currentLinks and ('Links' in linkName.split('.') or 'RelatedItem' in linkName.split('.') or 'Redundancy' in linkName.split('.')):
+                    refLinks.append((linkName, link, parent))
+                    continue
+
+                # NOTE: unable to determine autoexpanded resources without Schema
+                else:
+                    linkSuccess, linkCounts, linkResults, inner_links, linkobj = \
+                        validateSingleURI(link, profile, linkName, parent=parent, pass_through=pass_through)
+                allLinks.add(link.rstrip('/'))
+
+                results.update(linkResults)
+                counts.update(linkCounts)
+
+                if not linkSuccess:
+                    continue
+
+                inner_links, inner_limited_links = inner_links
+
+                for skipped_link in inner_limited_links:
+                    allLinks.add(inner_limited_links[skipped_link])
+                
+                # FEATURE - NodeTree 
+                inner_links = {key:value for key, value in inner_links.items() if URI in value}
+                innerLinksTuple = [(link, inner_links[link], linkobj) for link in inner_links]
+                
+                newLinks.extend(innerLinksTuple)
+                SchemaType = getType(linkobj.jsondata.get('@odata.type', 'NoType'))
+
+                subordinate_tree = []
 
                 current_parent = linkobj.parent
                 while current_parent:
