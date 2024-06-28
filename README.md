@@ -43,6 +43,41 @@ If you have a previous beautifulsoup4 installation, use the following command:
 There is no dependency based on Windows or Linux OS.
 The result logs are generated in HTML format and an appropriate browser, such as Chrome, Firefox, or Edge, is required to view the logs on the client system.
 
+## Features Added
+
+* ### Passthrough:
+
+  * Hyperscalers ,esp with GPU baseboards, house a redfish server on a separate management controller called the accelerator management controller (amc). Redfish access to such controllers via the baseboard management controller (BMC) is achieved using a passthrough like this ` https://<BMC_IP>:<BMC_Port>/<amc>/redfish/v1 `.
+
+  * We can now we can pass this passthrough (optionally) from interop validator command line argument as shown below:
+    
+        python RedfishInteropValidator.py --ip https://<IP>:<port> -u <username> -p <password> --logdir .\logs\path  --passthrough /<amc>   "<profile_path>\profile.json
+    
+
+* ### NodeTree:
+
+  * Permits interop validation with the given interop profile for all URIs under a specific URI/node of the redfish tree. 
+  * Note that any referenced node encountered which reside external to the give URI/node will not be considered for interop validation
+
+  * We can give the command as shown below
+
+        python RedfishInteropValidator.py --ip https://<IP>:<port> -u <username> -p <password> --logdir .\logs\path  --passthrough /<amc>   "<profile_path>\profile.json
+
+## Bug Fixes
+* #### Doubled Error Counts
+  * Interop fails for all resources & properties were counted twice. 
+  * Solved by initializing counter object before traversing and validating the given first uri. 
+
+    ```python
+        counts = Counter()
+        results = {}
+        # Validate top URI
+        validateSuccess, single_counts, results, links, resource_obj = \
+            validateSingleURI(URI, profile, uriName, expectedType, expectedSchema,         expectedJson, pass_through=pass_through)
+        counts.update(single_counts) 
+    ```
+
+
 ## Execution Steps
 
 The Redfish Interop Validator is designed to execute as a purely command line interface tool with no intermediate inputs expected during tool execution.  Below are the step by step instructions on setting up the tool for execution on any identified Redfish device for conformance test:

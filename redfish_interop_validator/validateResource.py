@@ -477,7 +477,7 @@ def validateURITree(URI, profile, uriName, expectedType=None, expectedSchema=Non
 
 def validateURINodeTree(URI, profile, uriName, expectedType=None, expectedSchema=None, expectedJson=None, pass_through=""):
     """name
-    Validates a Tree of URIs, traversing from the first given
+    Validates a NodeTree of URIs, traversing from the first given
     """
     allLinks = set()
     allLinks.add(URI.rstrip('/'))
