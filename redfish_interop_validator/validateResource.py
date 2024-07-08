@@ -121,7 +121,6 @@ def validateSingleURI(URI, profile, uriName='', expectedType=None, expectedSchem
     my_logger.verbose1("*** {}, {}".format(uriName, URI))
     uriName, SchemaFullType, jsondata = uriName, uriName, resource_obj.jsondata
     SchemaType = getType(jsondata.get('@odata.type', 'NoType'))
-    SchemaID = getID(jsondata.get("@odata.id", "NoID"))
 
     oemcheck = traverseInterop.config.get('oemcheck', True)
 
