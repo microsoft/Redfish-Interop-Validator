@@ -117,18 +117,6 @@ def getType(string: str):
         string = string.rsplit('#', 1)[1]
     return string.rsplit('.', 1)[-1]
 
-def getID(string: str):
-    """getType
-
-    Gives type of a type string (right hand side)
-
-    :param string:
-    :type string: str
-    """
-    # if '#' in string:
-    string = string.rsplit('/', 1)[1]
-    return string.rsplit('.', 1)[-1]
-
 
 def createContext(typestring: str):
     """createContext
