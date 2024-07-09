@@ -9,7 +9,7 @@ from io import StringIO
 
 import redfish_interop_validator.traverseInterop as traverseInterop
 import redfish_interop_validator.interop as interop
-from redfish_interop_validator.redfish import getType, getNamespace, getID
+from redfish_interop_validator.redfish import getType, getNamespace #getID
 from redfish_interop_validator.interop import REDFISH_ABSENT
 
 my_logger = logging.getLogger()
