@@ -1,5 +1,5 @@
 # Copyright Notice:
-# Copyright 2016-2021 DMTF. All rights reserved.
+# Copyright 2017-2024 DMTF. All rights reserved.
 # License: BSD 3-Clause License. For full text see link: https://github.com/DMTF/Redfish-Service-Validator/blob/master/LICENSE.md
 
 import configparser
@@ -49,10 +49,12 @@ def convert_config_to_args(args, config):
                     if option.lower() not in ['version', 'copyright']:
                         my_logger.error('Option {} not supported!'.format(option))
                 elif my_config[section][option] not in ['', None]:
-                    if option.lower() == 'payload':
+                    if option.lower() == 'payload' or option.lower() == 'collectionlimit':
                         setattr(args, option, my_config[section][option].split(' '))
                     else:
                         setattr(args, option, my_config[section][option])
+                    if option.lower() in ['password', 'token']:
+                        my_config.set(section, option, '******')
     my_config_dict = config_parse_to_dict(my_config)
     import json
     print(json.dumps(my_config_dict, indent=4))
