@@ -17,7 +17,7 @@ versionpattern = 'v[0-9]+_[0-9]+_[0-9]+'
 
 def splitVersionString(version):
     v_payload = version
-    if(re.match('([a-zA-Z0-9_.-]*\.)+[a-zA-Z0-9_.-]*', version) is not None):
+    if(re.match(r'([a-zA-Z0-9_.-]*\.)+[a-zA-Z0-9_.-]*', version) is not None):
         new_payload = getVersion(version)
         if new_payload is not None:
             v_payload = new_payload

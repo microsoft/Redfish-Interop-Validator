@@ -46,7 +46,7 @@ defaultrepository = 'http://redfish.dmtf.org/profiles'
 
 def getProfilesMatchingName(name, directories):
     pattern = r'\.{}\.'.format(versionpattern)
-    filepattern = re.compile(pattern.join(name.split('.')) + "|{}".format(name.replace('.', '\.')))
+    filepattern = re.compile(pattern.join(name.split('.')) + r"|{}".format(name.replace('.', r'\.')))
     for dirname in directories:
         for file in glob.glob(os.path.join(dirname, '*.json')):
             if filepattern.match(os.path.basename(file)):
