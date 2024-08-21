@@ -654,7 +654,7 @@ def validatePropertyRequirement(propResourceObj, profile_entry, rf_payload_tuple
     return msgs, counts
 
 
-def validateActionRequirement(profile_entry, rf_payload_tuple, actionname):
+def validateActionRequirement(profile_entry, rf_payload_tuple, actionname, passthrough=""):
     """
     Validate Requirements for one action
     """
