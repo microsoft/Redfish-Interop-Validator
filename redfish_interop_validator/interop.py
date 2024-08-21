@@ -654,7 +654,7 @@ def validatePropertyRequirement(propResourceObj, profile_entry, rf_payload_tuple
     return msgs, counts
 
 
-def validateActionRequirement(profile_entry, rf_payload_tuple, actionname):
+def validateActionRequirement(profile_entry, rf_payload_tuple, actionname, passthrough=""):
     """
     Validate Requirements for one action
     """
@@ -900,7 +900,7 @@ def validateInteropResource(propResourceObj, interop_profile, rf_payload, passth
                 actionName = '#' + my_type + '.' + item
             
             amsgs, acounts = validateActionRequirement(innerDict[item], (actionsJson.get(
-                actionName, REDFISH_ABSENT), rf_payloadInnerTuple), actionName)
+                actionName, REDFISH_ABSENT), rf_payloadInnerTuple), actionName, passthrough)
             counts.update(acounts)
             msgs.extend(amsgs)
     if "CreateResource" in interop_profile:
