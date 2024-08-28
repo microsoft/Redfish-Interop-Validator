@@ -287,13 +287,16 @@ def main(argslist=None, configfile=None):
     import redfish_interop_validator.tohtml as tohtml
 
     fails = 0
+    recommended_fails = 0
     for key in [key for key in finalCounts.keys()]:
         if finalCounts[key] == 0:
             del finalCounts[key]
             continue
         if any(x in key for x in ['problem', 'fail', 'bad', 'exception']):
             fails += finalCounts[key]
-
+        if any(x in key for x in ['Recommended']):
+            recommended_fails += finalCounts[key]
+    finalCounts["recommended.ButDoesNotExists"] = recommended_fails
     html_str = tohtml.renderHtml(results, finalCounts, tool_version, startTick, nowTick, currentService.config)
 
     lastResultsPage = datetime.strftime(startTick, os.path.join(logpath, "InteropHtmlLog_%m_%d_%Y_%H%M%S.html"))
@@ -309,7 +312,7 @@ def main(argslist=None, configfile=None):
     if not success:
         my_logger.error("Validation has failed: {} problems found".format(fails))
     else:
-        my_logger.info("Validation has succeeded.")
+        my_logger.info("Validation has succeeded.(Ignoring Fails from Recommended Properties.)")
         status_code = 0
 
     return status_code, lastResultsPage, 'Validation done'

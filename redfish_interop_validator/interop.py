@@ -357,7 +357,7 @@ def validateMinVersion(version, profile_entry):
     # If version doesn't contain version as is, try it as v#_#_#
     profile_entry_split = profile_entry.split('.')
     # get version from payload
-    if(re.match('#([a-zA-Z0-9_.-]*\.)+[a-zA-Z0-9_.-]*', version) is not None):
+    if(re.match(r'#([a-zA-Z0-9_.-]*\.)+[a-zA-Z0-9_.-]*', version) is not None):
         v_payload = getNamespace(version).split('.', 1)[-1]
         v_payload = v_payload.replace('v', '')
         if ('_' in v_payload):
@@ -654,7 +654,7 @@ def validatePropertyRequirement(propResourceObj, profile_entry, rf_payload_tuple
     return msgs, counts
 
 
-def validateActionRequirement(profile_entry, rf_payload_tuple, actionname):
+def validateActionRequirement(profile_entry, rf_payload_tuple, actionname, passthrough=""):
     """
     Validate Requirements for one action
     """
@@ -681,7 +681,7 @@ def validateActionRequirement(profile_entry, rf_payload_tuple, actionname):
 
     if "@Redfish.ActionInfo" in rf_payload_item:
         vallink = rf_payload_item['@Redfish.ActionInfo']
-        success, rf_payload_action, code, elapsed, _ = callResourceURI(vallink)
+        success, rf_payload_action, code, elapsed, _ = callResourceURI(get_valid_passthrough(passthrough, vallink) + vallink)
         if not success:
             rf_payload_action = None
 
@@ -774,16 +774,16 @@ def validateActionRequirement(profile_entry, rf_payload_tuple, actionname):
     return msgs, counts
 
 
-URI_ID_REGEX = '\{[A-Za-z0-9]*Id\}'
+URI_ID_REGEX = r'\{[A-Za-z0-9]*Id\}'
 
-VALID_ID_REGEX = '([A-Za-z0-9.!#$&-;=?\[\]_~])+'
+VALID_ID_REGEX = r'([A-Za-z0-9.!#$&-;=?\[\]_~])+'
 
 
 def compareRedfishURI(expected_uris, uri):
     success = False
     # If we have our URIs
     if expected_uris is not None:
-        my_uri_regex = "^{}$".format("|".join(expected_uris))
+        my_uri_regex = r"^{}$".format("|".join(expected_uris))
         my_uri_regex = re.sub(URI_ID_REGEX, VALID_ID_REGEX, my_uri_regex)
         success = re.fullmatch(my_uri_regex, uri) is not None
     else:
@@ -876,6 +876,8 @@ def validateInteropResource(propResourceObj, interop_profile, rf_payload, passth
     if "MinVersion" in interop_profile:
         my_type = propResourceObj.jsondata.get('@odata.type', 'NoType')
         msg, success = validateMinVersion(my_type, interop_profile['MinVersion'])
+        my_logger.info('### Validating MinVersion for {} {}'.format(my_type, success))
+        msg.name = "{}.MinVersion {}".format(rf_payload['@odata.id'], my_type)
         msgs.append(msg)
     if "PropertyRequirements" in interop_profile:
         innerDict = interop_profile["PropertyRequirements"]
@@ -898,7 +900,7 @@ def validateInteropResource(propResourceObj, interop_profile, rf_payload, passth
                 actionName = '#' + my_type + '.' + item
             
             amsgs, acounts = validateActionRequirement(innerDict[item], (actionsJson.get(
-                actionName, REDFISH_ABSENT), rf_payloadInnerTuple), actionName)
+                actionName, REDFISH_ABSENT), rf_payloadInnerTuple), actionName, passthrough)
             counts.update(acounts)
             msgs.extend(amsgs)
     if "CreateResource" in interop_profile:
