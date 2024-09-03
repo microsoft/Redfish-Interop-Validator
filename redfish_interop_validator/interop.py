@@ -616,24 +616,14 @@ def validatePropertyRequirement(propResourceObj, profile_entry, rf_payload_tuple
             elif not success:
                 my_logger.error("Comparison failed")
             if not success:
-                my_logger.error("###Validating PropertyValueRequirements for {} Expected {} FAILED".format(profile_entry.get("Values", []), redfish_value))
-                # msg = msgInterop('', profile_entry.get("Values", []), my_compare, redfish_value, testResultEnum.FAIL)
+                my_logger.error("###Validating PropertyValueRequirements for {} Actual {} Expected {} FAILED".format(item_name, redfish_value, profile_entry.get("Values", [])))
                 msg.name = "{}.{}.{}".format(propResourceObj.jsondata['@odata.id'], item_name, profile_entry.get("Values", []))
                 msg.ignore = False
                 msgs.append(msg)
             else:
-                my_logger.info("### Validating PropertyValueRequirements for {}".format(profile_entry.get("Values", [])))
-                # pcounts = {"property.value.{}.exists".format(profile_entry.get("Values", [])) : 1}
-                msg = msgInterop('', profile_entry.get("Values", []), my_compare, redfish_value, testResultEnum.PASS)
+                my_logger.error("###Validating PropertyValueRequirements for {} Actual {} Expected {} PASSED".format(item_name, redfish_value, profile_entry.get("Values", [])))
                 msg.name = "{}.{} {} {}".format(propResourceObj.jsondata['@odata.id'], item_name, redfish_value, profile_entry.get("Values", []))
-                # msg.name = "Comparison '{}' value {} found in property {} {}.{}".format(profile_entry.get("Comparison", "AnyOf"), profile_entry.get("Values", []), item_name, propResourceObj.jsondata['@odata.id'], "ValueRequirements")
-                # counts.update(pcounts)
                 msgs.append(msg)
-                # return msgs, counts
-            # msgs.append(msg)
-            # msg.name = item_name + '.' + msg.name
-
-            # Embed test results into profile, going forward seems to be the quick option outside of making a proper test object
             
 
         if "PropertyRequirements" in profile_entry:
