@@ -621,7 +621,7 @@ def validatePropertyRequirement(propResourceObj, profile_entry, rf_payload_tuple
                 msg.ignore = False
                 msgs.append(msg)
             else:
-                my_logger.error("###Validating PropertyValueRequirements for {} Actual {} Expected {} PASSED".format(item_name, redfish_value, profile_entry.get("Values", [])))
+                my_logger.info("###Validating PropertyValueRequirements for {} Actual {} Expected {} PASSED".format(item_name, redfish_value, profile_entry.get("Values", [])))
                 msg.name = "{}.{} {} {}".format(propResourceObj.jsondata['@odata.id'], item_name, redfish_value, profile_entry.get("Values", []))
                 msgs.append(msg)
             
