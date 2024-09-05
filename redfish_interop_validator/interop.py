@@ -108,7 +108,7 @@ def validateComparisonAnyOfAllOf(profile_entry, property_path="Unspecified"):
     return all_msgs
 
 
-def validateRequirement(profile_entry, rf_payload_item=None, conditional=False, parent_object_tuple=None):
+def validateRequirement(profile_entry, rf_payload_item=None, conditional=False, parent_object_tuple=None, property_name=""):
     """
     Validates Requirement profile_entry
 
@@ -137,7 +137,10 @@ def validateRequirement(profile_entry, rf_payload_item=None, conditional=False, 
 
     paramPass = not profile_entry == "Mandatory" or \
         profile_entry == "Mandatory" and not propDoesNotExist
-
+        
+    if not rf_payload_item:
+        my_logger.info("Empty Value found for Property {}".format(property_name))
+    
     if profile_entry == "IfImplemented":
         if propDoesNotExist:
             paramPass = testResultEnum.NA
@@ -573,7 +576,7 @@ def validatePropertyRequirement(propResourceObj, profile_entry, rf_payload_tuple
 
         # Read Requirement is default mandatory if not present
         requirement_entry = profile_entry.get('ReadRequirement', 'Mandatory')
-        msg, success = validateRequirement(requirement_entry, redfish_value, parent_object_tuple=redfish_parent_payload)
+        msg, success = validateRequirement(requirement_entry, redfish_value, parent_object_tuple=redfish_parent_payload, property_name=item_name)
         error_item_name = "{}.{}".format(parent_item_name, item_name) if parent_item_name != item_name else parent_item_name
         msg.name = "{}.{}".format(propResourceObj.jsondata['@odata.id'], error_item_name)
         msgs.append(msg)
@@ -613,27 +616,14 @@ def validatePropertyRequirement(propResourceObj, profile_entry, rf_payload_tuple
             elif not success:
                 my_logger.error("Comparison failed")
             if not success:
-                my_logger.error("### Validating PropertyValueRequirements for {} FAILED".format(profile_entry.get("Values", [])))
-                # pcounts = {"property.value.{}.not.found".format(profile_entry.get("Values", [])) : 1}
-                msg = msgInterop('', profile_entry.get("Values", []), my_compare, redfish_value, testResultEnum.FAIL)
-                msg.name = "{}.{} {} {}".format(propResourceObj.jsondata['@odata.id'], item_name, redfish_value, profile_entry.get("Values", []))
-                # msg.name = "Comparison '{}' value {} not found in property {} {}.{}".format(profile_entry.get("Comparison", "AnyOf"), profile_entry.get("Values", []), item_name, propResourceObj.jsondata['@odata.id'], "ValueRequirements")
-                # counts.update(pcounts)
+                my_logger.error("###Validating PropertyValueRequirements for {} Actual {} Expected {} FAILED".format(item_name, redfish_value, profile_entry.get("Values", [])))
+                msg.name = "{}.{}.{}".format(propResourceObj.jsondata['@odata.id'], item_name, profile_entry.get("Values", []))
+                msg.ignore = False
                 msgs.append(msg)
-                # return msgs, counts
             else:
-                my_logger.info("### Validating PropertyValueRequirements for {}".format(profile_entry.get("Values", [])))
-                # pcounts = {"property.value.{}.exists".format(profile_entry.get("Values", [])) : 1}
-                msg = msgInterop('', profile_entry.get("Values", []), my_compare, redfish_value, testResultEnum.PASS)
+                my_logger.info("###Validating PropertyValueRequirements for {} Actual {} Expected {} PASSED".format(item_name, redfish_value, profile_entry.get("Values", [])))
                 msg.name = "{}.{} {} {}".format(propResourceObj.jsondata['@odata.id'], item_name, redfish_value, profile_entry.get("Values", []))
-                # msg.name = "Comparison '{}' value {} found in property {} {}.{}".format(profile_entry.get("Comparison", "AnyOf"), profile_entry.get("Values", []), item_name, propResourceObj.jsondata['@odata.id'], "ValueRequirements")
-                # counts.update(pcounts)
                 msgs.append(msg)
-                # return msgs, counts
-            # msgs.append(msg)
-            # msg.name = item_name + '.' + msg.name
-
-            # Embed test results into profile, going forward seems to be the quick option outside of making a proper test object
             
 
         if "PropertyRequirements" in profile_entry:
@@ -856,7 +846,7 @@ def validateInteropResource(propResourceObj, interop_profile, rf_payload, passth
                 # Remove URIs
                 new_case = {key: val for key, val in use_case.items() if key not in ['URIs']}
 
-                new_msgs, new_counts = validateInteropResource(propResourceObj, new_case, rf_payload)
+                new_msgs, new_counts = validateInteropResource(propResourceObj, new_case, rf_payload, passthrough)
 
                 if any([msg.success == testResultEnum.FAIL for msg in new_msgs]):
                     my_msg.success = testResultEnum.FAIL
@@ -884,7 +874,7 @@ def validateInteropResource(propResourceObj, interop_profile, rf_payload, passth
         for item in innerDict:
             # NOTE: Program no longer performs fuzzy checks for misnamed properties, since there is no schema
             my_logger.info('### Validating PropertyRequirements for {}'.format(item))
-            pmsgs, pcounts = validatePropertyRequirement(propResourceObj, innerDict[item], (rf_payload.get(item, REDFISH_ABSENT), rf_payload_tuple), item, item)
+            pmsgs, pcounts = validatePropertyRequirement(propResourceObj, innerDict[item], (rf_payload.get(item, REDFISH_ABSENT), rf_payload_tuple), item, item, passthrough)
             counts.update(pcounts)
             msgs.extend(pmsgs)
     if "ActionRequirements" in interop_profile:
