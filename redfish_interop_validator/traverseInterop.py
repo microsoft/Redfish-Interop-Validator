@@ -76,7 +76,7 @@ class rfService():
         self.config['usessl'] = urlparse(self.config['configuri']).scheme in ['https']
         self.config['certificatecheck'] = False
         self.config['certificatebundle'] = None
-        self.config['timeout'] = 10
+        self.config['timeout'] = 60
 
         # NOTE: this is a validator limitation.  maybe move this to its own config inside validateResource
         if self.config['collectionlimit']:
