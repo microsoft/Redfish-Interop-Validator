@@ -579,6 +579,8 @@ def validatePropertyRequirement(propResourceObj, profile_entry, rf_payload_tuple
         msg, success = validateRequirement(requirement_entry, redfish_value, parent_object_tuple=redfish_parent_payload, property_name=item_name)
         error_item_name = "{}.{}".format(parent_item_name, item_name) if parent_item_name != item_name else parent_item_name
         msg.name = "{}.{}".format(propResourceObj.jsondata['@odata.id'], error_item_name)
+        if success == testResultEnum.NA and requirement_entry == "Recommended":
+            msg.name = "Recommended.DoesNotExists.{}.{}".format(propResourceObj.jsondata['@odata.id'], item_name)
         msgs.append(msg)
 
         if "WriteRequirement" in profile_entry:
@@ -910,6 +912,8 @@ def validateInteropResource(propResourceObj, interop_profile, rf_payload, passth
             counts['pass'] += 1
         elif item.success == testResultEnum.FAIL and 'fail.{}'.format(item.name) not in counts:
             counts['fail.{}'.format(item.name)] += 1
+        elif item.success == testResultEnum.NA:
+            counts['{}'.format(item.name)] += 1
         counts['totaltests'] += 1
     
     
