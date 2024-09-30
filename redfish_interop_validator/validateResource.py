@@ -455,7 +455,6 @@ def validateURITree(URI, profile, uriName, expectedType=None, expectedSchema=Non
             
     # interop service level checks
     finalResults = {}
-
     for item in message_list:
         if item.success == interop.testResultEnum.WARN:
             message_counts['warn'] += 1
@@ -463,7 +462,7 @@ def validateURITree(URI, profile, uriName, expectedType=None, expectedSchema=Non
             message_counts['pass'] += 1
         elif item.success == interop.testResultEnum.FAIL:
             message_counts['fail.{}'.format(item.name)] += 1
-
+        message_counts["totaltests"] += 1
     finalResults['n/a'] = {'uri': "Service Level Requirements", 'success': message_counts.get('fail', 0) == 0,
                            'counts': message_counts,
                            'messages': message_list, 'errors': error_messages.getvalue(), 'warns': '',
