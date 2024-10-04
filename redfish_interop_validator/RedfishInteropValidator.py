@@ -281,13 +281,14 @@ def main(argslist=None, configfile=None):
             innerCounts['warningPresent'] = 1
         if counters_all_pass and error_messages_present:
             innerCounts['failErrorPresent'] = 1
-
+        
         finalCounts.update(results[item]['counts'])
 
     import redfish_interop_validator.tohtml as tohtml
 
     fails = 0
     recommended_fails = 0
+    ignore_Counts = 0
     for key in [key for key in finalCounts.keys()]:
         if finalCounts[key] == 0:
             del finalCounts[key]
@@ -296,7 +297,11 @@ def main(argslist=None, configfile=None):
             fails += finalCounts[key]
         if any(x in key for x in ['Recommended']):
             recommended_fails += finalCounts[key]
+        
+        if any(x in key for x in ['ignore']):
+            ignore_Counts += finalCounts[key]
     finalCounts["recommended.ButDoesNotExists"] = recommended_fails
+    finalCounts["Ignores.ButDoesNotExists"] = ignore_Counts
     html_str = tohtml.renderHtml(results, finalCounts, tool_version, startTick, nowTick, currentService.config)
 
     lastResultsPage = datetime.strftime(startTick, os.path.join(logpath, "InteropHtmlLog_%m_%d_%Y_%H%M%S.html"))

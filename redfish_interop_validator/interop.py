@@ -53,7 +53,7 @@ def validateComparisonAnyOfAllOf(profile_entry, property_path="Unspecified"):
     for key in profile_entry:
         property_profile = profile_entry[key]
         my_compare = property_profile.get('Comparison', 'AnyOf')
-
+        
         if property_profile.get('Values') and my_compare in ['AnyOf', 'AllOf']:
             my_msgs = property_profile.get('_msgs', [])
             my_values, expected_values = [m.actual for m in my_msgs], property_profile['Values']
@@ -904,15 +904,17 @@ def validateInteropResource(propResourceObj, interop_profile, rf_payload, passth
     if "UpdateResource" in interop_profile:
         my_logger.info('Skipping UpdateResource')
         pass
-
-    for item in [item for item in msgs if not item.ignore]:
+    
+    for item in [item for item in msgs]:
         if item.success == testResultEnum.WARN:
             counts['warn'] += 1
         elif item.success == testResultEnum.PASS:
             counts['pass'] += 1
-        elif item.success == testResultEnum.FAIL and 'fail.{}'.format(item.name) not in counts:
+        elif item.success == testResultEnum.FAIL:
             counts['fail.{}'.format(item.name)] += 1
-        elif item.success == testResultEnum.NA:
+        elif item.ignore:
+            counts["ignore.{}".format(item.name)] += 1
+        elif item.success == testResultEnum.NA and "Recommended.DoesNotExists" in item.name:
             counts['{}'.format(item.name)] += 1
         counts['totaltests'] += 1
     
