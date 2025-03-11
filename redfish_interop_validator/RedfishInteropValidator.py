@@ -231,7 +231,7 @@ def main(argslist=None, configfile=None):
             elif 'tree' in pmode:
                 success, _, resultsNew, _, _ = validateURITree(ppath, profile, 'Target', expectedJson=jsonData, pass_through=pass_through)
             else:
-                success, _, resultsNew, _, _ = validateURITree('/redfish/v1/', profile, 'ServiceRoot', expectedJson=jsonData, pass_through=pass_through)
+                success, _, resultsNew, _, _ = validateURITree('/redfish/v1', profile, 'ServiceRoot', expectedJson=jsonData, pass_through=pass_through)
             profileName = profile.get('ProfileName')
             if results is None:
                 results = resultsNew

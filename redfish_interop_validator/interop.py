@@ -578,11 +578,15 @@ def validatePropertyRequirement(propResourceObj, profile_entry, rf_payload_tuple
         requirement_entry = profile_entry.get('ReadRequirement', 'Mandatory')
         msg, success = validateRequirement(requirement_entry, redfish_value, parent_object_tuple=redfish_parent_payload, property_name=item_name)
         error_item_name = "{}.{}".format(parent_item_name, item_name) if parent_item_name != item_name else parent_item_name
-        msg.name = "{}.{}".format(propResourceObj.jsondata['@odata.id'], error_item_name)
+        msg.name = "{}.{}.{}-Property Missing".format("PropertyRequirements", propResourceObj.jsondata['@odata.id'], error_item_name)
         if success == testResultEnum.NA and requirement_entry == "Recommended":
-            msg.name = "Recommended.DoesNotExists.{}.{}".format(propResourceObj.jsondata['@odata.id'], item_name)
+            msg.name = "PropertyRequirements.Recommended.DoesNotExists.{}.{}".format(propResourceObj.jsondata['@odata.id'] , item_name)
         msgs.append(msg)
-
+        if not success:
+            my_logger.error("### Validating PropertyRequirements for {} {} FAILED".format(propResourceObj.jsondata['@odata.id'], error_item_name))
+        else:
+            my_logger.info("### Validating PropertyRequirements for {} {} PASSED".format(propResourceObj.jsondata['@odata.id'], error_item_name))
+        
         if "WriteRequirement" in profile_entry:
             headers = propResourceObj.headers
             msg, success = validateWriteRequirement(profile_entry.get('WriteRequirement', 'Mandatory'), redfish_parent_payload, headers, item_name)
@@ -619,12 +623,12 @@ def validatePropertyRequirement(propResourceObj, profile_entry, rf_payload_tuple
                 my_logger.error("Comparison failed")
             if not success:
                 my_logger.error("###Validating PropertyValueRequirements for {} Actual {} Expected {} FAILED".format(item_name, redfish_value, profile_entry.get("Values", [])))
-                msg.name = "{}.{}.{}".format(propResourceObj.jsondata['@odata.id'], item_name, profile_entry.get("Values", []))
+                msg.name = "{}.{}.{}-Property Value Mismatch  Actual {} Expected {} ".format("PropertyValueRequirements", propResourceObj.jsondata['@odata.id'], error_item_name, redfish_value, profile_entry.get("Values", []))
                 msg.ignore = False
                 msgs.append(msg)
             else:
                 my_logger.info("###Validating PropertyValueRequirements for {} Actual {} Expected {} PASSED".format(item_name, redfish_value, profile_entry.get("Values", [])))
-                msg.name = "{}.{} {} {}".format(propResourceObj.jsondata['@odata.id'], item_name, redfish_value, profile_entry.get("Values", []))
+                msg.name = "{}.{}.{} {} {}".format("PropertyValueRequirements", propResourceObj.jsondata['@odata.id'], error_item_name, redfish_value, profile_entry.get("Values", []))
                 msgs.append(msg)
             
 
@@ -695,6 +699,7 @@ def validateActionRequirement(profile_entry, rf_payload_tuple, actionname, passt
                 else:
                     my_logger.error('@Redfish.ActionInfo for {} not listed, but is Mandatory'.format(actionname))
                 msg = msgInterop('ActionInfo', actioninfo_requirement, '-', '-', testResultEnum.FAIL)
+                msg.name = "ActionInfo.{}.{}-No Action Info found.".format(rf_payload_item['@Redfish.ActionInfo'], actionname)
             else:
                 msg = msgInterop('ActionInfo', actioninfo_requirement, '-', '-', testResultEnum.PASS)
 
@@ -905,7 +910,7 @@ def validateInteropResource(propResourceObj, interop_profile, rf_payload, passth
         my_logger.info('Skipping UpdateResource')
         pass
     
-    for item in [item for item in msgs]:
+    for item in [item for item in msgs if not item.ignore]:
         if item.success == testResultEnum.WARN:
             counts['warn'] += 1
         elif item.success == testResultEnum.PASS:

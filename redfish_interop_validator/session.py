@@ -42,7 +42,7 @@ class rfSession:
                 'UserName': self.user,
                 'Password': self.pwd
         }
-        sr = requests.get(self.server + '/redfish/v1/', verify=self.chkCert, headers=commonHeader, proxies=self.proxies)
+        sr = requests.get(self.server + '/redfish/v1', verify=self.chkCert, headers=commonHeader, proxies=self.proxies)
         success = sr.status_code in [200, 204] and sr.json() is not None
         if not success:
             self.logger.error('Could not retrieve service root to start Session')
